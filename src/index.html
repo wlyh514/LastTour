@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Last Tour</title>
+
+  <style>
+
+* {
+  font-family: 'Inconsolata', Courier, monospace;
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: black;
+  color: white
+}
+
+#asc-engine-layer-container {
+  position: relative;
+}
+
+#asc-engine-layer-container > canvas, #asc-engine-layer-container > div{
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.asc-engine-layer {
+  position: absolute;
+  overflow: hidden;
+}
+
+.asc-engine-tile {
+  position: absolute;
+}
+
+  </style>
+</head>
+<body>
+  <p>fps: <span id="asc-engine-fps">0</span> Now using <button id="asc-engine-renderer-name">Canvas Renderer</button></p>
+  <div id="asc-engine-layer-container"></div>
+  <script src="index.ts"></script>
+</body>
+</html>
