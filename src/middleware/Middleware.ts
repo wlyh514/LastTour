@@ -6,95 +6,79 @@
 
 import Chunk from "../game/Chunk";
 import Game from "../game/Game";
-import Tiles, { GameTile, GameTileTexture } from "../game/Tiles";
-import Color from "../mage-ascii-engine/Color";
-import Layer from "../mage-ascii-engine/Layer";
+import Tiles from "../game/Tiles";
+import Layer, { BitmapLayer } from "../mage-ascii-engine/Layer";
 import Renderer from "../mage-ascii-engine/Renderer/Renderer";
-import Tile from "../mage-ascii-engine/Tile";
+import { TileTexture } from "../mage-ascii-engine/Tile";
 import Vector from "../mage-ascii-engine/Vector";
+
 
 export default class Middleware {
     private game: Game; 
     private renderer: Renderer; 
-    private dimension: Vector; 
-    private namedLayers: Record<string, Layer>; 
+
+    private bitmapLayers: Record<string, BitmapLayer>; 
+    private layers: Record<string, Layer>; 
 
     private chunksBuffer: Map<number, Chunk>; 
-    private tilesBuffer: Uint8Array;
+    private timestamp: number; 
 
-    private backgroundTiles: Array<Tile>; 
     frameLastSecond: number; 
 
 
     constructor(game: Game, renderer: Renderer, dimension: Vector, fontSize: number) {
         this.game = game; 
         this.renderer = renderer; 
-        this.dimension = dimension; 
         this.chunksBuffer = new Map(); 
-        this.namedLayers = {}; 
+        this.bitmapLayers = {}; 
+        this.layers = {}; 
         this.renderer.setSize(fontSize)
 
-        const backgroundLayer = new Layer({ size: dimension }); 
-        const entitiesLayer = new Layer({ size: dimension }); 
-
+        const backgroundLayer = new BitmapLayer({ 
+            size: new Vector(dimension.x - 20, dimension.y),
+            z: 8
+        }); 
+        const entitiesLayer = new Layer({ 
+            size: new Vector(dimension.x - 20, dimension.y),
+            z: 9
+        }); 
+        const dialogueLayer = new BitmapLayer({
+            size: new Vector(60, 6),
+            pos: new Vector(0, 18),
+            z: 10
+        }); 
+        this.game.dialogueEngine.injectLayer(dialogueLayer); 
         // Add layers
-        this.namedLayers['background'] = backgroundLayer; 
+        this.bitmapLayers['background'] = backgroundLayer; 
+        this.layers['entities'] = entitiesLayer; 
+        this.bitmapLayers['dialogue'] = dialogueLayer; 
+
         this.renderer.addLayer('background', backgroundLayer); 
-        this.namedLayers['entities'] = entitiesLayer; 
         this.renderer.addLayer('entities', entitiesLayer); 
+        this.renderer.addLayer('dialogue', dialogueLayer); 
+
         this.renderer.onBeforeDraw(
             () => {
-                this.tileOverload(); 
+                // this.tileOverload(); 
                 // lighting etc...
             }
         ); 
-        this.backgroundTiles = Array.from({ length: this.dimension.x * this.dimension.y }, (_, i) => {
-            const x = i % this.dimension.x;
-            const y = Math.floor(i / this.dimension.x);
-          
-            return new Tile({
-              char: ' ',
-              pos: new Vector(x, y),
-              background: Color.Transparent(),
-              color: Color.Transparent()
-            });
-        });
+        this.timestamp = Date.now(); 
         this.frameLastSecond = 0; 
     }
 
-    tileOverload() {
-        const bgOps = this.namedLayers.background.operations; 
-        for (let i = 0; i < this.tilesBuffer.length; i++) {
-            const gameTile: GameTile = Tiles.tileList[this.tilesBuffer[i]]; 
-            const op = bgOps[i]; 
-            let texture: GameTileTexture; 
-            
-            if (gameTile.isDynamic) {
-                texture = gameTile.dynamicTexture[ Math.floor(this.renderer.frames / gameTile.textureShiftInterval) % gameTile.dynamicTexture.length]; 
-            }
-            else {
-                texture = gameTile.texture; 
-            }
 
-            op.char = texture.char; 
-            op.color = texture.color; 
-            op.background = texture.background; 
-            op.isVisible = texture.isVisible; 
-        }
-        // console.log(this.namedLayers.background.operations); 
-    }
-
-    render() {
+    render= () => {
+        this.timestamp = Date.now(); 
         const focusOn: Vector = this.game.focusOn; // Tile coord 
         // Get the chunk coord of the tile at the four corners
-        const leftTop: Vector = Vector.add(focusOn, Vector.multiply(this.dimension, -0.5));
-        const rightBottom: Vector = Vector.add(leftTop, this.dimension);
-
+        const bgSize: Vector = this.bitmapLayers.background.size; 
+        const leftTop: Vector = Vector.add(focusOn, Vector.multiply(bgSize, -0.5));
+        const rightBottom: Vector = Vector.add(leftTop, bgSize);
         const leftTopChunkCoord: Vector = 
             new Vector(Math.floor(leftTop.x / Chunk.SIZE), Math.floor(leftTop.y / Chunk.SIZE)); 
         const rightBottomChunkCoord: Vector =
             new Vector(Math.floor(rightBottom.x / Chunk.SIZE), Math.floor(rightBottom.y / Chunk.SIZE)); 
-        this.tilesBuffer = new Uint8Array(this.dimension.x * this.dimension.y); 
 
         // If the a chunk in the display area is not in chunkbuffer
         // Load it in
@@ -120,16 +104,33 @@ export default class Middleware {
 
                 for (let tileX = start.x; tileX < end.x; tileX ++) {
                     for (let tileY = start.y; tileY < end.y; tileY ++) {
-                        const tile: number = chunk.getTile(new Vector(
+                        const tileId: number = chunk.getTile(new Vector(
                             tileX - chunkStartCoord.x,
                             tileY - chunkStartCoord.y
                         ));
-                        this.tilesBuffer[(tileY - leftTop.y) * this.dimension.x + (tileX - leftTop.x)] = tile; 
+                        const indxOnBgLayer = (tileY - leftTop.y) * bgSize.x + (tileX - leftTop.x); 
+                        const texture: TileTexture = Tiles.getTileTexture(tileId, this.timestamp); 
+                        this.bitmapLayers.background.setTile(indxOnBgLayer, texture); 
                     }
                 }
             }
         }
-        this.backgroundTiles.forEach(tile => this.namedLayers.background.draw(tile)); 
+        this.bitmapLayers.background.draw(); 
+        // Draw entities
+        for (const entity of this.game.world.entities) {
+            if (entity.pos.x < leftTop.x || entity.pos.x > rightBottom.x ||
+                entity.pos.y < leftTop.y || entity.pos.y > rightBottom.y) {
+                    // The entity is not in render distance. 
+                    continue; 
+                }
+            // change tile.pos to the relative position of the entity on screen
+            entity.tile.pos.x = entity.pos.x - leftTop.x; 
+            entity.tile.pos.y = entity.pos.y - leftTop.y; 
+            this.layers.entities.draw(entity.tile); 
+        }
+        // Draw Dialogue box
+        this.bitmapLayers.dialogue.draw(); 
+
         this.renderer.commit(); 
     }
 }

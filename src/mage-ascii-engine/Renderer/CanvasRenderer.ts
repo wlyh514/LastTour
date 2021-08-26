@@ -48,12 +48,23 @@ export default class CanvasRenderer extends Renderer {
     commit(): void {
         this.beforeDraw(); 
         for (let [name, layer] of Object.entries(this.namedLayers)) {
+            
+            let context: CanvasRenderingContext2D = this.layerContexes[name]; 
+            let canvas: HTMLCanvasElement = this.layerCanvases[name]; 
+
+            if (!layer.isVisible) {
+                canvas.style.display = 'none'; 
+            }
+            else {
+                canvas.style.display = 'block'; 
+            }
+
+            canvas.style.opacity = layer.opacity.toString(); 
             if (!layer.isVisible || layer.opacity === 0) {
                 continue; 
             }
-            let context: CanvasRenderingContext2D = this.layerContexes[name]; 
-
-            for (const op of layer.operations) {
+            const operations = layer.getOperations(); 
+            for (const op of operations) {
                 
                 let gridElement: CanvasGridElement; 
                 if (!(op.tile.id in this.canvasGridElements)) {
@@ -66,7 +77,7 @@ export default class CanvasRenderer extends Renderer {
                 }
                 this.performCanvasOperation(context, gridElement.getErasePrevOp()); 
             }
-            for (const op of layer.operations) {
+            for (const op of operations) {
                 const gridElement = this.canvasGridElements[op.tile.id]; 
                 this.performCanvasOperation(context, gridElement.getPrintCurrentOp()); 
             }
@@ -94,7 +105,7 @@ export default class CanvasRenderer extends Renderer {
         if (op.char !== undefined) {
             ctx.font = `${this.size}px 'Inconsolata', Courier, monospace`; 
             ctx.fillStyle = op.color.toCssString(); 
-            ctx.fillText(op.char, pixelPos.x, pixelPos.y + this.size - 2); 
+            ctx.fillText(op.char, pixelPos.x, pixelPos.y + this.size - 6); 
         }
     }
 }
@@ -173,13 +184,18 @@ class CanvasGridElement {
 
         if (this.previousOp.pos.equals(this.currentOp.pos)) {
             // Two operations are in the same grid
-            if (this.previousOp.background.equals(this.currentOp.background)) {
+            if (this.previousOp.background.equals(this.currentOp.background) && this.currentOp.background.a === 1) {
                 // Two operations has the same backgroud
                 if (this.previousOp.char !== this.currentOp.char) {
                     factory.drawChar(this.previousOp.char, this.previousOp.background);
                 }
                 // The only difference being the color
+                
             }
+            else {
+                factory.drawBackground(transparent); 
+            }
+            
         }
         else {
             factory.drawBackground(transparent); 

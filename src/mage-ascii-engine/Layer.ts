@@ -1,3 +1,4 @@
+import { TileTexture } from "./Tile";
 import Color from "./Color";
 import Tile from "./Tile";
 import Vector from "./Vector";
@@ -9,14 +10,15 @@ export interface DrawingOperation {
   background: Color;
   pos: Vector;
   isVisible: boolean;
+  from?: string; 
 };
 
 const drawingOperation = (tile: Tile): DrawingOperation => ({
   tile,
   char: tile.char,
-  color: tile.color.clone(),
-  background: tile.background.clone(),
-  pos: tile.pos.clone(),
+  color: tile.color,
+  background: tile.background,
+  pos: tile.pos,
   isVisible: tile.isVisible
 });
 
@@ -33,15 +35,19 @@ export default class Layer {
   isVisible: boolean;
   pos: Vector;
   size: Vector;
-  operations: Array<DrawingOperation> = [];
+  protected operations: DrawingOperation[];
   private _z: number;
+
+  getOperations(): DrawingOperation[] {
+    return this.operations; 
+  }
 
   constructor(options: LayerConstructorOptions) {
     this.opacity = options.opacity || 1;
     this.isVisible = options.isVisible || true;
     this.pos = options.pos || Vector.Zero();
     this.size = options.size;
-
+    this.operations = []; 
     this._z = options.z || 0;
   }
 
@@ -52,6 +58,50 @@ export default class Layer {
   }
 
   clear() {
-    this.operations = [];
+    while (this.operations.length > 0) {
+      this.operations.pop(); 
+    }
+  }
+}
+
+/**
+ * A layer with tiles binded to itself. No more tiles can be added from outside. 
+ */
+export class BitmapLayer extends Layer {
+  private tiles: Tile[]; 
+
+  constructor(options: LayerConstructorOptions) {
+    super(options); 
+    this.tiles = Array.from({length: this.size.x * this.size.y}, (_, i) => {
+      return new Tile({
+        char: ' ',
+        color: new Color(255, 255, 255, 1), 
+        background: Color.Transparent(), 
+        isVisible: true, 
+        pos: new Vector(i % this.size.x, Math.floor(i / this.size.x))
+      }); 
+    }); 
+  }
+
+  /**
+   * Add all tiles to the layer's operations array
+   */
+  draw() {
+    this.clear(); 
+    for (const tile of this.tiles) {
+      this.operations.push(drawingOperation(tile)); 
+    }
+  }
+
+  /**
+   * Add only one tile to the layer's operations array
+   * @param indx index of the tile to be drew
+   */
+  drawOne(indx: number) {
+    this.operations.push(drawingOperation(this.tiles[indx])); 
+  }
+
+  setTile(indx: number, texture: TileTexture) {
+    this.tiles[indx].overloadFromTexture(texture); 
   }
 }
